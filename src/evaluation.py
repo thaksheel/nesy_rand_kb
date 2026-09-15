@@ -129,7 +129,7 @@ class Evaluation:
         return Results(
             accuracy=accuracy_score(gs, preds),
             f1_macro=f1_score(gs, preds, average="macro"),
-            f1=f1_score(gs, preds, average="micro"),
-            trues=gs,
-            preds=preds,
+            f1=f1_score(gs, preds, average=None),
+            trues=np.array(gs).astype(int),
+            preds=np.array(preds).astype(int),
         )
