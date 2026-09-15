@@ -1,0 +1,166 @@
+import re
+from pyDatalog import pyDatalog
+
+from src.manager import KBManager
+
+
+def split_by_top_level_comma(s):
+    """Split a string by commas, but only at the top level (not inside parentheses)."""
+    parts = []
+    current = []
+    paren_depth = 0
+
+    for char in s:
+        if char == "(":
+            paren_depth += 1
+            current.append(char)
+        elif char == ")":
+            paren_depth -= 1
+            current.append(char)
+        elif char == "," and paren_depth == 0:
+            parts.append("".join(current))
+            current = []
+        else:
+            current.append(char)
+
+    if current:
+        parts.append("".join(current))
+
+    return parts
+
+
+def parse_atom(atom_str, pred_table, var_table):
+    """Parse a single atom string like 'p1(a76)' or 'p5(X0, a22)' into a pyDatalog term."""
+    atom_str = atom_str.strip()
+    if not atom_str:
+        return None
+
+    m = re.match(r"([a-zA-Z_][a-zA-Z0-9_]*)\((.*)\)", atom_str)
+    if not m:
+        raise ValueError(f"Invalid atom format: '{atom_str}'")
+
+    pred = m.group(1)
+    args_str = m.group(2)
+    args = [a.strip() for a in args_str.split(",")] if args_str else []
+
+    parsed_args = []
+    for a in args:
+        if a in var_table:
+            parsed_args.append(var_table[a])
+        else:
+            parsed_args.append(a)  # constant as string
+
+    if pred not in pred_table:
+        raise ValueError(f"Unknown predicate: '{pred}'")
+
+    return pred_table[pred](*parsed_args)
+
+
+def load_kb(kb_lines, pred_table, var_table):
+    """Load facts and rules into pyDatalog."""
+    for line_num, line in enumerate(kb_lines, 1):
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+
+        line = line.rstrip(".")
+
+        try:
+            if ":-" in line:
+                # Rule: head :- body
+                head, body = line.split(":-", 1)
+                head_term = parse_atom(head.strip(), pred_table, var_table)
+
+                # Parse body atoms (separated by commas at top level)
+                body_parts = split_by_top_level_comma(body.strip())
+                body_atoms = [
+                    parse_atom(b.strip(), pred_table, var_table)
+                    for b in body_parts
+                    if b.strip()
+                ]
+
+                if body_atoms:
+                    body_term = body_atoms[0]
+                    for b in body_atoms[1:]:
+                        body_term = body_term & b
+                    head_term <= body_term
+            else:
+                # Fact
+                fact_term = parse_atom(line, pred_table, var_table)
+                +fact_term
+        except Exception as e:
+            print(f"Error on line {line_num}: {line}")
+            print(f"  Error: {e}")
+            raise
+
+
+def parse_query(query_str, pred_table, var_table):
+    """Parse a query string into a pyDatalog conjunction."""
+    query_str = query_str.strip().rstrip(".")
+    atoms = split_by_top_level_comma(query_str)
+
+    conj = None
+    for atom in atoms:
+        atom = atom.strip()
+        if not atom:
+            continue
+        term = parse_atom(atom, pred_table, var_table)
+        conj = term if conj is None else (conj & term)
+
+    return conj
+
+
+def main():
+    kbm = KBManager(
+        facts_path="./data/all_facts1.txt",
+        kb_path="./data/rand_kb1.txt",
+        instruction_path="./data/ins.txt",
+        queries_path="./data/test_queries1.txt",
+        reference_path="./data/reference.txt",
+    )
+
+    # Get KB data - adjust based on actual KBManager API
+    kb_lines = kbm.knowledge  # Use combined KB + facts
+    query_lines = kbm.queries
+
+    # Initialize pyDatalog
+    pyDatalog.clear()
+
+    # 1. Collect all predicate names
+    preds = set()
+    for line in kb_lines + query_lines:
+        for pred in re.findall(r"([a-zA-Z_][a-zA-Z0-9_]*)\s*\(", line):
+            preds.add(pred)
+
+    preds = sorted(list(preds))
+    print(f"Found {len(preds)} predicates: {preds[:5]}...")
+
+    # 2. Create predicate symbols
+    predicate_symbols = pyDatalog.create_terms(",".join(preds))
+    pred_table = {name: obj for name, obj in zip(preds, predicate_symbols)}
+
+    # 3. Create variable symbols
+    var_names = [f"X{i}" for i in range(10)]
+    var_symbols = pyDatalog.create_terms(",".join(var_names))
+    var_table = {name: obj for name, obj in zip(var_names, var_symbols)}
+
+    # 4. Load KB
+    print(f"Loading {len(kb_lines)} KB lines...")
+    load_kb(kb_lines, pred_table, var_table)
+
+    # 5. Process queries
+    print(f"Processing {len(query_lines)} queries...")
+    for idx, query_str in enumerate(query_lines[1:3]):  # Test first 3 queries
+        print(f"\nQuery {idx}: {query_str}")
+        try:
+            query_term = parse_query(query_str, pred_table, var_table)
+            result = query_term
+            is_true = len(result) > 0
+            print(f"  Result: {is_true}")
+        except Exception as e:
+            print(f"  Error: {e}")
+
+
+if __name__ == "__main__":
+    main()
+    print("\nDone!")

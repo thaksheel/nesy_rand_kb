@@ -1,0 +1,28 @@
+You are evaluating a Datalog query using a subset of a knowledge base.
+
+### Knowledge Base (Relevant Slice)
+<KB_REV/>
+
+### Query
+<QUERY/>
+
+### Task
+Determine whether the query is **true** or **false** under Datalog semantics.
+
+A query is a conjunction of atoms. It is **true** if there exists at least one assignment of
+variables that makes all atoms simultaneously satisfiable using the facts and rules in the KB slice.
+
+### Reasoning Instructions
+1. Identify all predicates in the query.
+2. For each atom, find all facts or rule heads that unify with it.
+3. If a rule head matches, check whether its body atoms can be satisfied using the KB slice.
+4. Propagate variable bindings across all atoms.
+5. If a consistent assignment exists that satisfies all atoms → True.
+   Otherwise → False.
+
+### Reasoning Example 
+<RESONING EXAMPLE/>
+
+### Output Format
+Answer: True or False
+Reasoning: A concise explanation following the reasoning template.

@@ -1,0 +1,38 @@
+Reasoning Template 
+1. Expand rules into derived facts  
+For each rule of the form p(X,Y) :- q(Y,X)., match every q(Y,X) fact and produce the corresponding p(X,Y) fact.
+Example: from q(a,c) derive p(c,a); from q(b,d) derive p(d,b).
+
+2. Apply rule conditions  
+For rules like r(X,Y) :- p(X,Y), s(X)., check each derived p(X,Y) fact and verify whether s(X) is also true.
+Only pairs where both conditions hold produce an r(X,Y) fact.
+
+3. Collect all derived r facts  
+List every r(X,Y) obtained from step 2.
+
+4. Answer queries  
+A query r(u,v)? is true if and only if r(u,v) appears in the derived facts.
+If it does not appear, the query is false. 
+
+Reasoning Example using Knowledge Base 
+Consider this Datalog knowledge base.
+<KB>
+p(X,Y) :- q(Y,X).
+r(X,Y) :- p(X,Y), s(X).
+s(a).
+s(d).
+s(b).
+q(a,c).
+q(b,d).
+<KB>
+Answer the following true/false queries using only the semantics of Datalog.
+r(d,a)?
+r(d,b)?
+
+Process: 
+Derived p facts: p(c,a), p(d,b)
+Derived r facts (only where s(X) holds): r(d,b)
+
+Query answers:
+r(d,a)? → false
+r(d,b)? → true
