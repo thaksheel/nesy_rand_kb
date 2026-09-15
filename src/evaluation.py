@@ -3,10 +3,13 @@ import pandas as pd
 from typing import Tuple, List, Dict, Optional, Literal
 from numpy.typing import NDArray
 import numpy as np
+import json
+import ast 
 import re
 from sklearn.metrics import accuracy_score, f1_score
 from matplotlib import pyplot as plt
 import clingo
+from tqdm import tqdm
 
 from .llm_response import LLMResponse
 from .manager import KBManager, KBData
@@ -93,20 +96,40 @@ class Evaluation:
             print("  KB/constraints caused error:", e)
             return False
         result = ctl.solve()
-        return result.satisfiable 
+        return result.satisfiable
+
+
+    def extract_json_dict(self, text: str):
+        # TODO: improve str_json parsing. Using re to get results for now 
+        m = re.search(r"```json\s*(\{.*?\})\s*```", text, re.DOTALL)
+        if not m:
+            m = re.search(r'"answer"\s*:\s*(true|false)', text)
+            if not m:
+                return None 
+            return m.group(1) == "true"
+        raw = m.group(1)
+        if raw.startswith("'") and raw.endswith("'"):
+            raw = raw[1:-1]
+        try:
+            raw = ast.literal_eval(f"'{raw}'")
+        except Exception:
+            pass  
+        return json.loads(raw.replace("\n", ""))
 
     def evaluate_kb(self, kbd: List[KBData]):
         gs = []
         preds = []
-        for kb in kbd: 
+        for kb in tqdm(kbd):
             gs.append(self.get_groundtruth(kb.relevant_observation, kb.query))
-            out = self.llm.response({"user": kb.prompt})
-            preds.append(out)
+            out = self.llm.response([{"role": "user", "content": kb.prompt}])
+            pred = self.extract_json_dict(out)
+            if pred is None:
+                raise ValueError("predictions from llm is none in evaluate_kb.")
+            preds.append(pred["answer"])
         return Results(
-            accuracy=accuracy_score(gs, preds), 
-            f1_macro=f1_score(gs, preds, average="macro"), 
-            f1=f1_score(gs, preds, average="micro"), 
-            trues=gs, 
+            accuracy=accuracy_score(gs, preds),
+            f1_macro=f1_score(gs, preds, average="macro"),
+            f1=f1_score(gs, preds, average="micro"),
+            trues=gs,
             preds=preds,
         )
-
