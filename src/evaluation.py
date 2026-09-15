@@ -98,15 +98,15 @@ class Evaluation:
         result = ctl.solve()
         return result.satisfiable
 
-
     def extract_json_dict(self, text: str):
-        # TODO: improve str_json parsing. Using re to get results for now 
+        # TODO: improve str_json parsing. Using re to get results for now
         m = re.search(r"```json\s*(\{.*?\})\s*```", text, re.DOTALL)
         if not m:
             m = re.search(r'"answer"\s*:\s*(true|false)', text)
             if not m:
                 return None 
-            return m.group(1) == "true"
+            b = m.group(1) == "true"
+            return {"answer": b}
         raw = m.group(1)
         if raw.startswith("'") and raw.endswith("'"):
             raw = raw[1:-1]
