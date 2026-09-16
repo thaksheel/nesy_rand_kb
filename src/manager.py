@@ -81,7 +81,6 @@ class KBManager:
     def get_kb_data(
         self,
         add_reference: bool = False,
-        use_all_kb: bool = True,
     ) -> List[KBData]:
         kb = [
             KBData(

@@ -22,7 +22,8 @@ for ref in [True, False]:
             model_name=modelname, 
             device="cuda", 
         )
-        result = evaluation.evaluate_kb(kbd=kb_data)
+        custom_truth = np.ones(len(kb_data))
+        result = evaluation.evaluate_kb(kbd=kb_data, custom_truth=custom_truth)
         df_raw = pd.DataFrame({"preds": result.preds, "trues": result.trues})
         r = "w" if ref else "wo"
         df_raw.to_excel(f"./exports/qwne25_kb{i}_{r}_ref_all.xlsx")

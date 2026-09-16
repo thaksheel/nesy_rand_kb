@@ -116,12 +116,18 @@ class Evaluation:
             pass  
         return json.loads(raw.replace("\n", ""))
 
-    def evaluate_kb(self, kbd: List[KBData]):
+    def evaluate_kb(self, kbd: List[KBData], custom_truth: NDArray, use_all_kb:bool = True):
         gs = []
         preds = []
         for kb in tqdm(kbd):
-            gs.append(self.get_groundtruth(kb.relevant_observation, kb.query))
-            out = self.llm.response([{"role": "user", "content": kb.prompt}])
+            if custom_truth is None:
+                gs.append(self.get_groundtruth(kb.relevant_observation, kb.query))
+            else: 
+                gs = custom_truth
+            if use_all_kb:
+                out = self.llm.response([{"role": "user", "content": kb.all_kb}])
+            else: 
+                out = self.llm.response([{"role": "user", "content": kb.prompt}])
             pred = self.extract_json_dict(out)
             if pred is None:
                 raise ValueError("predictions from llm is none in evaluate_kb.")
