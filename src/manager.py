@@ -10,7 +10,12 @@ from .config import KBData
 
 class KBManager:
     def __init__(
-        self, facts_path: str, kb_path: str, instruction_path: str, queries_path: str, reference_path:str
+        self,
+        facts_path: str,
+        kb_path: str,
+        instruction_path: str,
+        queries_path: str,
+        reference_path: str,
     ):
         self.all_facts: List[str] = self.load_kb(facts_path)
         self.kb: List[str] = self.load_kb(kb_path)
@@ -60,13 +65,23 @@ class KBManager:
         prompt = prompt.replace("<QUERY/>", query)
         return prompt
 
+    def generate_query_all(self, query: str):
+        kb_observation = self.knowledge
+        kb_observation = " ".join(kb_observation)
+        prompt = deepcopy(self.instructions_template)
+        prompt = prompt.replace("<KB_REV/>", kb_observation)
+        prompt = prompt.replace("<QUERY/>", query)
+        return prompt
+
     def add_reasoning_ref(self, kb: List[KBData]):
         for i, k in enumerate(kb):
             kb[i].prompt = kb[i].prompt.replace("<RESONING EXAMPLE/>", self.reference)
-        return kb 
+        return kb
 
     def get_kb_data(
-        self, add_reference: bool = False, 
+        self,
+        add_reference: bool = False,
+        use_all_kb: bool = True,
     ) -> List[KBData]:
         kb = [
             KBData(
@@ -74,9 +89,10 @@ class KBManager:
                 query=q,
                 relevant_observation=self.relevant_observation(q),
                 prompt=self.generate_query_prompt(q),
+                all_kb=self.generate_query_all(q),
             )
             for i, q in enumerate(self.queries)
         ]
         if add_reference:
             kb = self.add_reasoning_ref(kb)
-        return kb 
+        return kb

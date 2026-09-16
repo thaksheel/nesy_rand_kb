@@ -12,7 +12,7 @@ import clingo
 from tqdm import tqdm
 
 from .llm_response import LLMResponse
-from .manager import KBManager, KBData
+from .manager import KBData
 from .config import Results
 
 

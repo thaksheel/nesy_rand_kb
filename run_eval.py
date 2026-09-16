@@ -6,6 +6,7 @@ from src.manager import KBManager
 from src.evaluation import Evaluation
 
 for ref in [True, False]:
+    results = []
     for i in range(5):
         kbm = KBManager(
             facts_path=f"./data/all_facts{i+1}.txt",
@@ -21,13 +22,17 @@ for ref in [True, False]:
             model_name=modelname, 
             device="cuda", 
         )
-        results = evaluation.evaluate_kb(kbd=kb_data)
-        df_raw = pd.DataFrame({"preds": results.preds, "trues": results.trues})
+        result = evaluation.evaluate_kb(kbd=kb_data)
+        df_raw = pd.DataFrame({"preds": result.preds, "trues": result.trues})
         r = "w" if ref else "wo"
-        df_raw.to_excel(f"./exports/qwne25_kb{i}_{r}_ref.xlsx")
+        df_raw.to_excel(f"./exports/qwne25_kb{i}_{r}_ref_all.xlsx")
         print(
-            f"\n\naccuracy={results.accuracy:.4f} "
-            f"f1_macro={results.f1_macro:.4f} "
-            f"f1={results.f1} "
+            f"\n\naccuracy={result.accuracy:.4f} "
+            f"f1_macro={result.f1_macro:.4f} "
+            f"f1={result.f1} "
         )
+        results.append(result)
+    df_results = pd.DataFrame([d.__dict__ for d in results])
+    df_results.to_excel(f"./exports/qwen25_rslt_{r}_ref.xlsx")
+
 print("END")

@@ -10,6 +10,7 @@ class KBData:
     query:str 
     relevant_observation: NDArray 
     prompt: str 
+    all_kb: str 
 
 
 @dataclass
