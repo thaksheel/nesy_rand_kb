@@ -11,6 +11,8 @@ class KBData:
     relevant_observation: NDArray 
     prompt: str 
     all_kb: str 
+    groundtruth: bool
+    depths: int 
 
 
 @dataclass
@@ -19,4 +21,5 @@ class Results:
     f1_macro: float 
     f1: NDArray 
     preds: NDArray
-    trues: NDArray
+    trues: NDArray 
+

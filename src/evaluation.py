@@ -4,16 +4,14 @@ from typing import Tuple, List, Dict, Optional, Literal
 from numpy.typing import NDArray
 import numpy as np
 import json
-import ast 
+import ast
 import re
 from sklearn.metrics import accuracy_score, f1_score
 from matplotlib import pyplot as plt
 import clingo
 from tqdm import tqdm
 
-from .llm_response import LLMResponse
-from .manager import KBData
-from .config import Results
+from . import Results, KBData, LLMResponse
 
 
 class Evaluation:
@@ -81,7 +79,7 @@ class Evaluation:
         constraint = ":- not query_satisfied."
         return rule + "\n" + constraint
 
-    def get_groundtruth(self, relevant_obs, query_str) -> bool:
+    def get_groundtruth_clingo(self, relevant_obs, query_str) -> bool:
         """Return True iff KB ∧ query is satisfiable under Clingo."""
         asp_program = self.kb_to_asp(relevant_obs)
         asp_constraints = self.query_to_constraints(query_str)
@@ -98,13 +96,16 @@ class Evaluation:
         result = ctl.solve()
         return result.satisfiable
 
+    def get_groundtruth(self, kbd: List[KBData]) -> bool:
+        return np.array([k.groundtruth for k in kbd])
+
     def extract_json_dict(self, text: str):
         # TODO: improve str_json parsing. Using re to get results for now
         m = re.search(r"```json\s*(\{.*?\})\s*```", text, re.DOTALL)
         if not m:
             m = re.search(r'"answer"\s*:\s*(true|false)', text)
             if not m:
-                return None 
+                return None
             b = m.group(1) == "true"
             return {"answer": b}
         raw = m.group(1)
@@ -113,20 +114,22 @@ class Evaluation:
         try:
             raw = ast.literal_eval(f"'{raw}'")
         except Exception:
-            pass  
+            pass
         return json.loads(raw.replace("\n", ""))
 
-    def evaluate_kb(self, kbd: List[KBData], custom_truth: NDArray, use_all_kb:bool = True):
+    def evaluate_kb(
+        self, kbd: List[KBData], custom_truth: NDArray, use_all_kb: bool = True
+    ):
         gs = []
         preds = []
         for kb in tqdm(kbd):
             if custom_truth is None:
-                gs.append(self.get_groundtruth(kb.relevant_observation, kb.query))
-            else: 
+                gs = self.get_groundtruth(kbd)
+            else:
                 gs = custom_truth
             if use_all_kb:
                 out = self.llm.response([{"role": "user", "content": kb.all_kb}])
-            else: 
+            else:
                 out = self.llm.response([{"role": "user", "content": kb.prompt}])
             pred = self.extract_json_dict(out)
             if pred is None:
