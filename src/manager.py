@@ -1,7 +1,5 @@
 import numpy as np
 import re
-import os
-import pandas as pd
 from typing import List
 from copy import deepcopy
 from numpy.typing import NDArray
@@ -12,16 +10,13 @@ from . import KBData
 class KBManager:
     def __init__(
         self,
-        facts_path: str,
         kb_path: str,
         instruction_path: str,
         queries_data_path: str,
         reference_path: str,
     ): 
         """`queries_data_path` needs format [queries, groundtruth, depths]"""
-        self.all_facts: List[str] = self.load_kb(facts_path)
-        self.kb: List[str] = self.load_kb(kb_path)
-        self.knowledge: List[str] = self.kb + self.all_facts
+        self.knowledge: List[str] = self.load_kb(kb_path) 
         self.instructions_template = self.load_txt(instruction_path)
         self.queries_path = queries_data_path
         self.reference = self.load_txt(reference_path)
@@ -69,7 +64,8 @@ class KBManager:
                 self.depths.append(int(depth))
         return self
 
-    def relevant_observation(self, query: str) -> NDArray:
+    def __relevant_observation(self, query: str) -> NDArray:
+        """Deprecated, no need to select relevant slices/observations from kb"""
         predicates = self.extract_predicates(query)
         constants = self.extract_constants(query)
         relevant = []
@@ -84,23 +80,14 @@ class KBManager:
         return np.array(relevant)
 
     def generate_query_prompt(self, query: str):
-        kb_observation = self.relevant_observation(query)
-        kb_observation = " ".join(kb_observation.tolist())
-        prompt = deepcopy(self.instructions_template)
-        prompt = prompt.replace("<KB_REV/>", kb_observation)
-        prompt = prompt.replace("<QUERY/>", query)
-        return prompt
-
-    def generate_query_all(self, query: str):
-        kb_observation = self.knowledge
-        kb_observation = " ".join(kb_observation)
+        kb_observation = " ".join(self.knowledge)
         prompt = deepcopy(self.instructions_template)
         prompt = prompt.replace("<KB_REV/>", kb_observation)
         prompt = prompt.replace("<QUERY/>", query)
         return prompt
 
     def add_reasoning_ref(self, kb: List[KBData]):
-        for i, k in enumerate(kb):
+        for i in range(kb):
             kb[i].prompt = kb[i].prompt.replace("<RESONING EXAMPLE/>", self.reference)
         return kb
 
@@ -112,9 +99,7 @@ class KBManager:
             KBData(
                 qid=i,
                 query=q,
-                relevant_observation=self.relevant_observation(q),
                 prompt=self.generate_query_prompt(q),
-                all_kb=self.generate_query_all(q),
                 groundtruth=self.groundtruths[i],
                 depths=self.depths[i], 
             )

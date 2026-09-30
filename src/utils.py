@@ -8,9 +8,7 @@ from numpy.typing import NDArray
 class KBData: 
     qid: int 
     query:str 
-    relevant_observation: NDArray 
     prompt: str 
-    all_kb: str 
     groundtruth: bool
     depths: int 
 

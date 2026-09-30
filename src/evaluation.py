@@ -1,14 +1,10 @@
 import torch
-import pandas as pd
 from typing import Tuple, List, Dict, Optional, Literal
 from numpy.typing import NDArray
 import numpy as np
-import json
-import ast
+import pandas as pd
 import re
 from sklearn.metrics import accuracy_score, f1_score
-from matplotlib import pyplot as plt
-import clingo
 from tqdm import tqdm
 
 from . import Results, KBData, LLMResponse
@@ -27,118 +23,80 @@ class Evaluation:
             device=torch.device(device),
         )
 
-    def kb_to_asp(self, kb_lines):
-        asp = []
-        for line in kb_lines:
-            line = line.strip()
-            if not line or line.startswith("#"):
-                continue
-            if not line.endswith("."):
-                line += "."
-            asp.append(line)
-        return "\n".join(asp)
-
-    def split_by_top_level_comma(self, s: str):
-        """Split a string by commas, but only at the top level (not inside parentheses)."""
-        parts = []
-        current = []
-        paren_depth = 0
-
-        for char in s:
-            if char == "(":
-                paren_depth += 1
-                current.append(char)
-            elif char == ")":
-                paren_depth -= 1
-                current.append(char)
-            elif char == "," and paren_depth == 0:
-                parts.append("".join(current))
-                current = []
-            else:
-                current.append(char)
-
-        if current:
-            parts.append("".join(current))
-
-        return parts
-
-    def query_to_constraints(self, query_str):
-        atoms = self.split_by_top_level_comma(query_str.strip().rstrip("."))
-        # Normalize predicate names
-        normalized = []
-        for atom in atoms:
-            atom = atom.strip()
-            m = re.match(r"([A-Za-z_][A-Za-z0-9_]*)\((.*)\)", atom)
-            pred = m.group(1).lower()
-            args = m.group(2)
-            normalized.append(f"{pred}({args})")
-        # Build safe rule
-        body = ", ".join(normalized)
-        rule = f"query_satisfied :- {body}."
-        # Constraint requiring the query to be true
-        constraint = ":- not query_satisfied."
-        return rule + "\n" + constraint
-
-    def get_groundtruth_clingo(self, relevant_obs, query_str) -> bool:
-        """Return True iff KB ∧ query is satisfiable under Clingo."""
-        asp_program = self.kb_to_asp(relevant_obs)
-        asp_constraints = self.query_to_constraints(query_str)
-
-        ctl = clingo.Control(["--warn=no-atom-undefined"])
-        ctl.add("base", [], asp_program)
-        ctl.add("query", [], asp_constraints)
-        try:
-            ctl.ground([("base", []), ("query", [])])
-        except RuntimeError as e:
-            print("Clingo parsing failed:")
-            print("  KB/constraints caused error:", e)
-            return False
-        result = ctl.solve()
-        return result.satisfiable
-
     def get_groundtruth(self, kbd: List[KBData]) -> bool:
         return np.array([k.groundtruth for k in kbd])
 
-    def extract_json_dict(self, text: str):
-        # TODO: improve str_json parsing. Using re to get results for now
-        m = re.search(r"```json\s*(\{.*?\})\s*```", text, re.DOTALL)
-        if not m:
-            m = re.search(r'"answer"\s*:\s*(true|false)', text)
-            if not m:
-                return None
-            b = m.group(1) == "true"
-            return {"answer": b}
-        raw = m.group(1)
-        if raw.startswith("'") and raw.endswith("'"):
-            raw = raw[1:-1]
-        try:
-            raw = ast.literal_eval(f"'{raw}'")
-        except Exception:
-            pass
-        return json.loads(raw.replace("\n", ""))
+    def extract_results(self, text: str) -> Optional[Tuple[bool, str]]:
+        reasoning = re.search(r"'reasoning'\s*:\s*'([^']*)'", text, re.DOTALL)
+        answer = re.search(r"'answer'\s*:\s*(True|False)", text)
+        reasoning = reasoning.group(1) if reasoning else None
+        answer = answer.group(1) == "True" if answer else None
+        return answer, reasoning
+
+    def save_reasoning(self, kbd: List[KBData], reasonings: List[str], outpath: str):
+        fields = ["qid", "query", "groundtruth", "depths", "reasoning"]
+        data = dict(
+            zip(
+                [k for k in fields],
+                [[] for _ in fields],
+            )
+        )
+        for i, kb in kbd:
+            for k in data.keys():
+                if k == "reasoning":
+                    data[k].append(reasonings[i])
+                    continue
+                data[k].append(getattr(kb, k))
+        df = pd.DataFrame(data)
+        df.to_csv(outpath)
+        return df
 
     def evaluate_kb(
-        self, kbd: List[KBData], custom_truth: NDArray, use_all_kb: bool = True
-    ):
-        gs = []
+        self,
+        kbd: List[KBData],
+        reasoning_outpath: str = None,
+    ) -> Results:
         preds = []
+        reasonings = []
         for kb in tqdm(kbd):
-            if custom_truth is None:
-                gs = self.get_groundtruth(kbd)
-            else:
-                gs = custom_truth
-            if use_all_kb:
-                out = self.llm.response([{"role": "user", "content": kb.all_kb}])
-            else:
-                out = self.llm.response([{"role": "user", "content": kb.prompt}])
-            pred = self.extract_json_dict(out)
-            if pred is None:
-                raise ValueError("predictions from llm is none in evaluate_kb.")
-            preds.append(pred["answer"])
+            gs = self.get_groundtruth(kbd)
+            out = self.llm.response([{"role": "user", "content": kb.prompt}])
+            pred, reasoning = self.extract_results(out)
+            if pred is None or reasoning is None:
+                raise ValueError(
+                    "predictions/reasoning from llm is none in evaluate_kb."
+                )
+            preds.append(pred)
+            reasonings.append(reasoning)
+        if reasoning_outpath:
+            self.save_reasoning(kbd, reasonings)
         return Results(
             accuracy=accuracy_score(gs, preds),
             f1_macro=f1_score(gs, preds, average="macro"),
             f1=f1_score(gs, preds, average=None),
             trues=np.array(gs).astype(int),
             preds=np.array(preds).astype(int),
-        )
+        ) 
+
+    def sort_by_reasoning_steps(self,):
+        pass 
+
+    def results_to_df(
+        self,
+        kbds: List[List[KBData]],
+        results: List[Results],
+        preds_outpath: str = None,
+        results_outpath: str = None,
+    ) -> Tuple[pd.DataFrame, pd.DataFrame]:
+        df_results = pd.DataFrame([r.__dict__ for r in results])
+        df_results: pd.DataFrame = df_results.drop(columns=["preds", "trues"])
+        df_predictions = []
+        for i, kbd in enumerate(kbds):
+            df_p = pd.DataFrame([r.__dict__ for r in kbd])
+            df_p["kb_num"] = [i] * len(df_p)
+            df_p["preds"] = results[i].preds
+            df_predictions.append(df_p)
+        df_predictions: pd.DataFrame = pd.concat(df_predictions)
+        df_results.to_excel(results_outpath)
+        df_predictions.to_excel(preds_outpath)
+        return df_results, df_predictions

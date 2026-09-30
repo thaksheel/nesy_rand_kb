@@ -1,6 +1,6 @@
 You are evaluating a Datalog query using a subset of a knowledge base.
 
-### Knowledge Base (Relevant Slice)
+### Knowledge Base 
 <KB_REV/>
 
 ### Query
@@ -26,6 +26,6 @@ variables that makes all atoms simultaneously satisfiable using the facts and ru
 ### Output Format
 give your answer in a json format following the example 
 {
+   'reasoning': str # a detailed explanation of your solution using the reasoning template and instructions provided.
    'answer': bool # True of False
-   'reasoning': str #A concise explanation following the reasoning template.
 }

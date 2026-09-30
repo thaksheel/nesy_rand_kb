@@ -9,7 +9,6 @@ for ref in [True, False]:
     results = []
     for i in range(5):
         kbm = KBManager(
-            facts_path=f"./data/all_facts{i+1}.txt",
             kb_path=f"./data/rand_kb{i+1}.txt",
             instruction_path="./data/ins.txt",
             queries_path=f"./data/test_queries{i+1}.txt",
