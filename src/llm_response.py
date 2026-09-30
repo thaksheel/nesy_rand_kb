@@ -19,8 +19,10 @@ class LLMResponse:
         max_new_tokens: int,
         device: Literal["cpu", "cuda"],
         hf_token:str, 
+        load_4bit: bool = True,
     ):
         self.model_name = model_name
+        self.load_4bit = load_4bit
         self.device = device
         self.max_new_tokens = max_new_tokens
         self.hf_token = hf_token
@@ -28,7 +30,7 @@ class LLMResponse:
 
     def initialize(self) -> Tuple[PreTrainedModel, PreTrainedTokenizer]:
         bnb_config = BitsAndBytesConfig(
-            load_in_4bit=True,
+            load_in_4bit=self.load_4bit,
             bnb_4bit_quant_type="nf4",
             bnb_4bit_compute_dtype=torch.bfloat16,
         )
