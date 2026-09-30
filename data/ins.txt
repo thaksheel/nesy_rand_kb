@@ -24,8 +24,7 @@ variables that makes all atoms simultaneously satisfiable using the facts and ru
 <RESONING EXAMPLE/>
 
 ### Output Format
-give your answer in a json format following the example 
+   give your answer in a json format following the example. Do not give a reasoning Ijust want the answer. 
 {
-   'reasoning': str # a detailed explanation of your solution using the reasoning template and instructions provided.
    'answer': bool # True of False
 }

@@ -14,9 +14,9 @@ class KBManager:
         instruction_path: str,
         queries_data_path: str,
         reference_path: str,
-    ): 
+    ):
         """`queries_data_path` needs format [queries, groundtruth, depths]"""
-        self.knowledge: List[str] = self.load_kb(kb_path) 
+        self.knowledge: List[str] = self.load_kb(kb_path)
         self.instructions_template = self.load_txt(instruction_path)
         self.queries_path = queries_data_path
         self.reference = self.load_txt(reference_path)
@@ -24,7 +24,7 @@ class KBManager:
         # post init
         self.queries: List[str] = []
         self.groundtruths: List[bool] = []
-        self.depths: List[int] = [] 
+        self.depths: List[int] = []
         self._load_queries_data()
 
     def extract_predicates(self, query: str):
@@ -87,7 +87,7 @@ class KBManager:
         return prompt
 
     def add_reasoning_ref(self, kb: List[KBData]):
-        for i in range(kb):
+        for i, _ in enumerate(kb):
             kb[i].prompt = kb[i].prompt.replace("<RESONING EXAMPLE/>", self.reference)
         return kb
 
@@ -101,7 +101,7 @@ class KBManager:
                 query=q,
                 prompt=self.generate_query_prompt(q),
                 groundtruth=self.groundtruths[i],
-                depths=self.depths[i], 
+                depths=self.depths[i],
             )
             for i, q in enumerate(self.queries)
         ]

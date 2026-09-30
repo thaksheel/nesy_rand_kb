@@ -5,6 +5,7 @@ from transformers import (
     AutoModelForCausalLM,
     PreTrainedTokenizer,
     PreTrainedModel,
+    BitsAndBytesConfig
 )
 from transformers import logging
 
@@ -17,20 +18,29 @@ class LLMResponse:
         model_name: str,
         max_new_tokens: int,
         device: Literal["cpu", "cuda"],
+        hf_token:str, 
     ):
         self.model_name = model_name
         self.device = device
         self.max_new_tokens = max_new_tokens
+        self.hf_token = hf_token
         self.model, self.tokenizer = self.initialize()
 
     def initialize(self) -> Tuple[PreTrainedModel, PreTrainedTokenizer]:
-        tokenizer: PreTrainedTokenizer = AutoTokenizer.from_pretrained(self.model_name)
+        bnb_config = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_quant_type="nf4",
+            bnb_4bit_compute_dtype=torch.bfloat16,
+        )
+        tokenizer: PreTrainedTokenizer = AutoTokenizer.from_pretrained(self.model_name, token=self.hf_token)
         tokenizer.padding_side = "left"
         tokenizer.pad_token = tokenizer.eos_token
         model: PreTrainedModel = AutoModelForCausalLM.from_pretrained(
             self.model_name,
             dtype=torch.bfloat16,
             device_map=self.device,
+            token=self.hf_token, 
+            quantization_config=bnb_config,
         )
         return model, tokenizer 
 
@@ -69,13 +79,16 @@ class LLMResponse:
             raise ValueError("prompt is None for message_list")
         else:
             inputs = self.tokenizer(prompt, return_tensors="pt").to(self.model.device)
-        generated_ids = self.model.generate(
-            **inputs,
-            max_new_tokens=self.max_new_tokens,
-            do_sample=False,
-        )
-        generated = generated_ids[0][inputs["input_ids"].shape[1] :]
-        output = self.tokenizer.decode(generated, skip_special_tokens=True)
+        with torch.inference_mode():
+            generated_ids = self.model.generate(
+                **inputs,
+                max_new_tokens=self.max_new_tokens,
+                eos_token_id=self.tokenizer.eos_token_id,
+                pad_token_id=self.tokenizer.eos_token_id,
+                do_sample=False,
+            )
+            generated = generated_ids[0][inputs["input_ids"].shape[1] :]
+            output = self.tokenizer.decode(generated, skip_special_tokens=True)
         return output
 
 
