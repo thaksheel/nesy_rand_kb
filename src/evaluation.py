@@ -8,7 +8,7 @@ from sklearn.metrics import accuracy_score, f1_score
 from tqdm import tqdm
 import logging
 
-from . import Results, KBData, LLMResponse, LLMProvider, LLMOut
+from . import Results, KBData, LLMOut, LLMProvider
 
 
 class Evaluation:

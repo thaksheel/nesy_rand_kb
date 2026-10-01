@@ -2,23 +2,27 @@ import pandas as pd
 import numpy as np
 from matplotlib import pyplot as plt
 from dotenv import load_dotenv
-from huggingface_hub import login
 import os
 
-from src import Evaluation, KBManager
+from src import Evaluation, KBManager, OpenModelSelection, CloseModelSelection
+
 
 load_dotenv()
-token = os.getenv("HF_TOKEN")
+hf_token = os.getenv("HF_TOKEN")
+oa_token = os.getenv("OPENAI_TOKEN")
+model_name = OpenModelSelection.qwen25_7b
+model_name = CloseModelSelection.gpt6_luna
+
 evaluation = Evaluation(
-    model_name=model_name,
-    device="cuda",
-    max_new_tokens=4094,
-    hf_token=token,
+    provider="openai",
+    model_name=model_name.value,
+    token=oa_token,
+    max_new_tokens=4092,
     load_4bit=False,
 )
 results = []
 kbds = []
-for i in range(1):
+for i in range(5):
     kbm = KBManager(
         kb_path=f"./data/kbs/rand_kb{i+1}.txt",
         instruction_path="./data/ins.txt",
@@ -29,18 +33,17 @@ for i in range(1):
     results.append(
         evaluation.evaluate_kb(
             kbd=kb_data,
-            reasoning_outpath=f"./exports/llama31_reasoning{i}.csv",
+            reasoning_outpath=f"./exports/{model_name.name}_reasoning{i}.csv",
         )
     )
     kbds.append(kb_data)
-
 df_results, df_predictions = evaluation.results_to_df(
     kbds,
     results,
-    preds_outpath=f"./exports/llama31_preds{0}.xlsx",
-    results_outpath=f"./exports/llama31_results{0}.xlsx",
+    preds_outpath=f"./exports/{model_name.name}_preds{0}.xlsx",
+    results_outpath=f"./exports/{model_name.name}_results{0}.xlsx",
 )
 df_steps = evaluation.score_by_reasoning_steps(df_predictions)
-df_steps.to_excel(f"./exports/scores_steps{0}.xlsx")
+df_steps.to_excel(f"./exports/{model_name.name}_scores_steps{0}.xlsx")
 
 print("END")
