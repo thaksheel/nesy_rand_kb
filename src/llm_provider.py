@@ -97,7 +97,7 @@ class LLMProvider:
             torch_dtype=torch.bfloat16,
             device_map="auto",
             token=token,
-        )
+        ) 
         pipe = pipeline(
             "text-generation",
             model=model,
