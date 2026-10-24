@@ -2,10 +2,15 @@ from .utils import KBData, Results, LLMOut, OpenModelSelection, CloseModelSelect
 from .manager import KBManager
 from .llm_response import LLMResponse
 from .llm_provider import LLMProvider, ThinkingBudge
+from .prompts import Prompt, PromptStrategy, Methods, AnswerFormat
 
 from .evaluation import Evaluation
 
 __all__ = [
+    "Prompt",
+    "PromptStrategy",
+    "Methods",
+    "AnswerFormat",
     "OpenModelSelection",
     "CloseModelSelection",
     "ThinkingBudge",

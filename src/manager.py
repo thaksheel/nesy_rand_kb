@@ -5,8 +5,7 @@ from typing import List, Optional
 from copy import deepcopy
 from numpy.typing import NDArray
 
-from . import KBData
-from .prompts import Prompt, PromptStrategy
+from . import KBData, Prompt, PromptStrategy
 
 
 class KBManager:
