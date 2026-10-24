@@ -3,6 +3,7 @@ import numpy as np
 from matplotlib import pyplot as plt
 from dotenv import load_dotenv
 import os
+import warnings 
 
 from src import (
     Evaluation,
@@ -12,6 +13,12 @@ from src import (
     Methods,
     Prompt,
     AnswerFormat,
+)
+
+warnings.filterwarnings(
+    "ignore",
+    category=FutureWarning,
+    message=r".*_check_is_size.*",
 )
 
 load_dotenv()

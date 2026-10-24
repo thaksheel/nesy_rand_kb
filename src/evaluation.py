@@ -89,7 +89,7 @@ class Evaluation:
             groundtruth = self.get_groundtruth(kbd)
             llm_out = self.llm.invoke([{"role": "user", "content": kb.prompt}])
             pred, reasoning = self.extract_results(llm_out.response)
-            if not all([pred, reasoning]):
+            if pred is None and reasoning is None:
                 warnings.warn("predictions/reasoning from llm is none in evaluate_kb.")
                 continue
             preds.append(pred)
