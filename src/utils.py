@@ -1,6 +1,6 @@
 import numpy as np 
-from dataclasses import dataclass 
-from typing import List, Optional, Literal, Any 
+from dataclasses import dataclass, field
+from typing import List, Optional, Literal, Any, Dict
 from numpy.typing import NDArray
 from enum import Enum 
 
@@ -11,7 +11,10 @@ class KBData:
     query:str 
     prompt: str 
     groundtruth: bool
-    depths: int 
+    depths: int  
+    messages: List[Dict[str, str]] = field(default_factory=list)
+    method: str = ""
+    shots: str = ""
 
 
 @dataclass

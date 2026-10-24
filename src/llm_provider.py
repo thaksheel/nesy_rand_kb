@@ -68,7 +68,7 @@ class LLMProvider:
         self.answer_reserve = answer_reserve
 
         # null fields
-        self.tokenizer = None
+        self.tokenizer: TokenizersBackend = None
         self.llm: BaseLLM = None
 
         if provider == "hf":
@@ -83,8 +83,8 @@ class LLMProvider:
                 response = self.llm.invoke(p)
                 return LLMOut(
                     response=response,
-                    input_token=len(str(p)) / 4,
-                    output_token=len(response) / 4,
+                    input_token=len(self.tokenizer(str(p)).input_ids),
+                    output_token=len(self.tokenizer(response).input_ids),
                     model_name=self.model_name,
                     provider=self.provider,
                 )

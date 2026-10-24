@@ -1,28 +1,3 @@
-"""
-Count reasoning steps the way the Aristotle paper (Xu et al., ACL 2025) does,
-for its Fig. 4 "Accuracy vs. Number of Steps" comparison.
-
-How Aristotle counts a step (from search_resolve.py in github.com/Aiden0526/Aristotle):
-  * One step = one Search-Router + Resolver round, i.e. one LLM call to the
-    resolver that takes (current clause, complementary clause) -> new clause.
-  * The counter `search_round` starts at 0 and is incremented once at the end of
-    every loop iteration that called the resolver. Iterations that exit early
-    (no complement found, cache exhausted) do NOT add a step.
-  * It is capped by --search_round (default 10) PER PATH.
-  * Every problem runs TWO paths (S_n and ¬S_n), saved in two result files:
-        results/<DS>/<DS>_<model>_search_negation_True.json
-        results/<DS>/<DS>_<model>_search_negation_False.json
-    Each record stores 'search_round' and 'reasoning_step' (an indexed list).
-
-The repo does not ship the averaging script. The paper reports 11.65 steps on
-ProofWriter with GPT-4; since one path is capped at 10, that number must be the
-SUM of both paths per problem, averaged over problems. That is this script's
-default ("combined"); per-path averages are printed too.
-
-Usage:
-    python count_steps.py aristotle --dataset ProofWriter --model gpt-4 [--results_dir ./results]
-    python count_steps.py baseline  --file my_tot_run.jsonl     # records with "num_steps"
-"""
 import argparse
 import json
 import os
@@ -79,8 +54,15 @@ def count_aristotle(dataset, model, results_dir="./results"):
         s_neg, s_pos = steps_in_record(neg[id_]), steps_in_record(pos[id_])
         if s_neg is None or s_pos is None:
             continue
-        rows.append({"id": id_, "neg": s_neg, "pos": s_pos,
-                     "total": s_neg + s_pos, "correct": is_correct(neg[id_], pos[id_])})
+        rows.append(
+            {
+                "id": id_,
+                "neg": s_neg,
+                "pos": s_pos,
+                "total": s_neg + s_pos,
+                "correct": is_correct(neg[id_], pos[id_]),
+            }
+        )
     return rows
 
 
@@ -92,9 +74,9 @@ class StepCounter:
     """Counts visited nodes/steps for one problem.
 
     ToT / CR / DetermLR: call .visit() each time a thought/node is generated
-      (expanded) — that is a "visited node".
+        (expanded) — that is a "visited node".
     CoT-SC: call .visit() once per sampled chain, or .visit(n) with the number
-      of reasoning lines in each chain, depending on which definition you report.
+        of reasoning lines in each chain, depending on which definition you report.
     Or wrap your LLM call with .wrap(fn) to count every call automatically.
     """
 
@@ -108,6 +90,7 @@ class StepCounter:
         def inner(*a, **kw):
             self.n += 1
             return llm_fn(*a, **kw)
+
         return inner
 
 
@@ -115,9 +98,19 @@ def count_baseline(path):
     rows = []
     with open(path) as f:
         text = f.read().strip()
-    recs = json.loads(text) if text.startswith("[") else [json.loads(l) for l in text.splitlines() if l.strip()]
+    recs = (
+        json.loads(text)
+        if text.startswith("[")
+        else [json.loads(l) for l in text.splitlines() if l.strip()]
+    )
     for r in recs:
-        rows.append({"id": r["id"], "total": int(r["num_steps"]), "correct": bool(r.get("correct", False))})
+        rows.append(
+            {
+                "id": r["id"],
+                "total": int(r["num_steps"]),
+                "correct": bool(r.get("correct", False)),
+            }
+        )
     return rows
 
 
@@ -131,10 +124,16 @@ def report(rows, label):
     print(f"== {label} ==")
     print(f"Problems counted        : {len(rows)}")
     print(f"Accuracy                : {acc:.2%}")
-    print(f"Avg steps per problem   : {statistics.mean(tot):.2f}  (std {statistics.pstdev(tot):.2f})")
+    print(
+        f"Avg steps per problem   : {statistics.mean(tot):.2f}  (std {statistics.pstdev(tot):.2f})"
+    )
     if "neg" in rows[0]:
-        print(f"  avg steps, ¬S_n path  : {statistics.mean(r['neg'] for r in rows):.2f}")
-        print(f"  avg steps, S_n path   : {statistics.mean(r['pos'] for r in rows):.2f}")
+        print(
+            f"  avg steps, ¬S_n path  : {statistics.mean(r['neg'] for r in rows):.2f}"
+        )
+        print(
+            f"  avg steps, S_n path   : {statistics.mean(r['pos'] for r in rows):.2f}"
+        )
     corr = [r["total"] for r in rows if r["correct"]]
     if corr:
         print(f"Avg steps (correct only): {statistics.mean(corr):.2f}")
@@ -162,6 +161,7 @@ def main():
 
     if args.csv and rows:
         import csv
+
         with open(args.csv, "w", newline="") as f:
             w = csv.DictWriter(f, fieldnames=list(rows[0]))
             w.writeheader()
