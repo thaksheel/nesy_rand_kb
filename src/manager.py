@@ -1,10 +1,12 @@
+import os
 import numpy as np
 import re
-from typing import List
+from typing import List, Optional
 from copy import deepcopy
 from numpy.typing import NDArray
 
 from . import KBData
+from .prompts import Prompt, PromptStrategy
 
 
 class KBManager:
@@ -16,6 +18,7 @@ class KBManager:
         reference_path: str,
     ):
         """`queries_data_path` needs format [queries, groundtruth, depths]"""
+        self.kb_name = os.path.basename(kb_path)
         self.knowledge: List[str] = self.load_kb(kb_path)
         self.instructions_template = self.load_txt(instruction_path)
         self.queries_path = queries_data_path
@@ -64,21 +67,6 @@ class KBManager:
                 self.depths.append(int(depth))
         return self
 
-    def __relevant_observation(self, query: str) -> NDArray:
-        """Deprecated, no need to select relevant slices/observations from kb"""
-        predicates = self.extract_predicates(query)
-        constants = self.extract_constants(query)
-        relevant = []
-        for line in self.knowledge:
-            line_preds = set(re.findall(r"([a-zA-Z0-9_]+)\(", line))
-            if not (line_preds & predicates):
-                continue
-            lines_consts = set(re.findall(r"\b(a[0-9]+)\b", line))
-            if constants and not (lines_consts & constants) and lines_consts:
-                continue
-            relevant.append(line)
-        return np.array(relevant)
-
     def generate_query_prompt(self, query: str):
         kb_observation = " ".join(self.knowledge)
         prompt = deepcopy(self.instructions_template)
@@ -94,7 +82,31 @@ class KBManager:
     def get_kb_data(
         self,
         add_reference: bool = False,
+        prompt: Optional[Prompt] = None,
     ) -> List[KBData]:
+        """Without `prompt`: the ins.txt template, as before.
+        With `prompt`: zero-shot / few-shot / CoT prompts from prompts.py
+        (add_reference then appends reference.txt as an example of the reasoning)."""
+        if prompt is not None:
+            strategy = PromptStrategy(
+                prompt,
+                knowledge=self.knowledge,
+                queries=self.queries,
+                groundtruths=self.groundtruths,
+                kb_name=self.kb_name,
+                reference=self.reference if add_reference else "",
+            )
+            return [
+                KBData(
+                    qid=i,
+                    query=q,
+                    prompt=strategy.get_prompt(i),
+                    groundtruth=self.groundtruths[i],
+                    depths=self.depths[i],
+                )
+                for i, q in enumerate(self.queries)
+            ]
+
         kb = [
             KBData(
                 qid=i,
