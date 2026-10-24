@@ -1,4 +1,5 @@
 import torch
+import warnings
 from typing import Tuple, List, Dict, Optional, Literal
 from numpy.typing import NDArray
 import numpy as np
@@ -43,13 +44,18 @@ class Evaluation:
     def get_groundtruth(self, kbd: List[KBData]):
         return np.array([k.groundtruth for k in kbd]).astype(int)
 
-    def extract_results(self, text: str) -> Optional[Tuple[bool, str]]:
-        reasoning = re.search(r'"reasoning"\s*:\s*"((?:\\.|[^"\\])*)"', text, re.DOTALL)
-        answer = re.search(
+    def extract_results(self, text: str) -> Tuple[Optional[bool], Optional[str]]:
+        if "<think>" in text and "</think>" not in text:
+            return None, None  # thinking never finished
+        text = text.split("</think>")[-1]  # parse only the final answer
+        reasoning = re.findall(
+            r'"reasoning"\s*:\s*"((?:\\.|[^"\\])*)"', text, re.DOTALL
+        )
+        answer = re.findall(
             r'"answer"\s*:\s*(true|false|"[^"]*"|\d+(?:\.\d+)?)', text, re.IGNORECASE
         )
-        reasoning = reasoning.group(1) if reasoning else None
-        answer = answer.group(1).lower() == "true" if answer else None
+        reasoning = reasoning[-1] if reasoning else None
+        answer = answer[-1].strip('"').lower() in ("true", "yes") if answer else None
         return answer, reasoning
 
     def save_reasoning(self, kbd: List[KBData], reasonings: List[str], outpath: str):
@@ -74,26 +80,27 @@ class Evaluation:
         self,
         kbd: List[KBData],
         reasoning_outpath: str = None,
-    ) -> Results:
+    ) -> Results: 
         preds = []
+        trues = []
         reasonings = []
         llm_outs: List[LLMOut] = []
         for i, kb in enumerate(tqdm(kbd)):
-            gs = self.get_groundtruth(kbd)
+            groundtruth = self.get_groundtruth(kbd)
             llm_out = self.llm.invoke([{"role": "user", "content": kb.prompt}])
             pred, reasoning = self.extract_results(llm_out.response)
-            if pred is None:
-                raise ValueError(
-                    "predictions/reasoning from llm is none in evaluate_kb."
-                )
+            if not all([pred, reasoning]):
+                warnings.warn("predictions/reasoning from llm is none in evaluate_kb.")
+                continue
             preds.append(pred)
             reasonings.append(reasoning)
             llm_outs.append(llm_out)
+            trues.append(groundtruth[i])
             if self.log:
                 s = (
                     f"id={kb.qid} "
                     f"preds={pred} "
-                    f"true={gs[i]} "
+                    f"true={groundtruth[i]} "
                     f"reasoning={reasoning} "
                 )
                 logging.info(s)
@@ -101,10 +108,10 @@ class Evaluation:
             self.save_reasoning(kbd, reasonings, outpath=reasoning_outpath)
         preds = np.array(preds).astype(int)
         return Results(
-            accuracy=accuracy_score(gs, preds),
-            f1_macro=f1_score(gs, preds, average="macro"),
-            f1=f1_score(gs, preds, average=None),
-            trues=np.array(gs).astype(int),
+            accuracy=accuracy_score(trues, preds),
+            f1_macro=f1_score(trues, preds, average="macro"),
+            f1=f1_score(trues, preds, average=None),
+            trues=np.array(trues).astype(int),
             preds=np.array(preds).astype(int),
             input_token=np.array([l.input_token for l in llm_outs]),
             output_token=np.array([l.output_token for l in llm_outs]),

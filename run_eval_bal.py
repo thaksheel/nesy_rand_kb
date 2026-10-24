@@ -10,15 +10,16 @@ from src import Evaluation, KBManager, OpenModelSelection, CloseModelSelection
 load_dotenv()
 hf_token = os.getenv("HF_TOKEN")
 oa_token = os.getenv("OPENAI_TOKEN")
-model_name = OpenModelSelection.qwen25_7b
 model_name = CloseModelSelection.gpt6_luna
+model_name = OpenModelSelection.qwen3_8b
 
 evaluation = Evaluation(
-    provider="openai",
+    provider="hf",
     model_name=model_name.value,
     token=oa_token,
-    max_new_tokens=4092,
-    load_4bit=False,
+    max_new_tokens=16384,
+    temperature=0.6, 
+    load_4bit=True,
 )
 results = []
 kbds = []

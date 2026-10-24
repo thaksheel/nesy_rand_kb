@@ -5,13 +5,47 @@ from transformers import (
     AutoTokenizer,
     AutoModelForCausalLM,
     pipeline,
-    BitsAndBytesConfig,
+    BitsAndBytesConfig, 
+    LogitsProcessor, 
+    LogitsProcessorList, 
+    TokenizersBackend, 
 )
 from langchain_huggingface import HuggingFacePipeline
 from langchain_openai import ChatOpenAI
 from langchain_core.language_models import BaseLLM
 
 from . import LLMOut
+
+
+class ThinkingBudge(LogitsProcessor):
+    """Caps the <think> section of reasoning models inside ONE generate() call.
+    Once thinking reaches `budget` tokens it forces Qwen's stop-thinking phrase
+    and </think>, so the rest of max_new_tokens goes to the final answer."""
+
+    STOP = (
+        "\n\nConsidering the limited time by the user, I have to give the "
+        "solution based on the thinking directly now.\n"
+    )
+
+    def __init__(self, tokenizer: TokenizersBackend, budget: int):
+        self.start = tokenizer.convert_tokens_to_ids("<think>")
+        self.end = tokenizer.convert_tokens_to_ids("</think>")
+        self.budget = budget
+        self.forced = tokenizer.encode(self.STOP, add_special_tokens=False) + [self.end]
+
+    def __call__(self, input_ids, scores):
+        for b in range(input_ids.shape[0]):
+            ids = input_ids[b].tolist()
+            if self.start not in ids:
+                continue 
+            s = len(ids) - 1 -ids[::-1].index(self.start)
+            if self.end in ids[s+1:]:
+                continue 
+            k = len(ids) - s - 1 - self.budget 
+            if k >= 0:
+                scores[b, :] = float("-inf")
+                scores[b, self.forced[min(k, len(self.forced) -1)]] = 0.0 
+        return scores 
 
 
 class LLMProvider:
@@ -23,6 +57,7 @@ class LLMProvider:
         max_new_tokens: int = 2048,
         temperature: float = 0.0,
         load_in_4bit: bool = True,
+        answer_reserve: int = 1024, 
     ):
         self.provider = provider
         self.model_name = model_name
@@ -30,6 +65,7 @@ class LLMProvider:
         self.max_new_tokens = max_new_tokens
         self.temperature = temperature
         self.load_in_4bit = load_in_4bit
+        self.answer_reserve = answer_reserve
 
         # null fields
         self.tokenizer = None
@@ -46,33 +82,33 @@ class LLMProvider:
                 p = self.build_prompt(messages)
                 response = self.llm.invoke(p)
                 return LLMOut(
-                    response=response, 
-                    input_token=len(str(p))/4, 
-                    output_token=len(response)/4, 
-                    model_name=self.model_name, 
-                    provider=self.provider, 
+                    response=response,
+                    input_token=len(str(p)) / 4,
+                    output_token=len(response) / 4,
+                    model_name=self.model_name,
+                    provider=self.provider,
                 )
             elif self.provider == "openai":
                 response = self.llm.invoke(messages)
                 usage = response.response_metadata["token_usage"]
-                response = response.content 
+                response = response.content
                 return LLMOut(
-                    response=response, 
-                    input_token=usage['prompt_tokens'], 
-                    output_token=usage['completion_tokens'], 
-                    model_name=self.model_name, 
-                    provider=self.provider, 
+                    response=response,
+                    input_token=usage["prompt_tokens"],
+                    output_token=usage["completion_tokens"],
+                    model_name=self.model_name,
+                    provider=self.provider,
                 )
             else:
                 raise NotImplementedError
         else:
-            response = self.llm.invoke(prompt) 
+            response = self.llm.invoke(prompt)
             return LLMOut(
-                response=response, 
-                input_token=len(prompt)/4, # crude approx. 
-                output_token=len(response)/4, # crude approx. 
-                model_name=self.model_name, 
-                provider=self.provider, 
+                response=response,
+                input_token=len(prompt) / 4,  # crude approx.
+                output_token=len(response) / 4,  # crude approx.
+                model_name=self.model_name,
+                provider=self.provider,
             )
 
     def init_openai(self, token: str):
@@ -98,6 +134,11 @@ class LLMProvider:
             device_map="auto",
             token=token,
         ) 
+        gen_kwargs = {}
+        vocab = self.tokenizer.get_vocab()
+        if "<think>" in vocab and "</think>" in vocab:
+            budget = self.max_new_tokens - self.answer_reserve  
+            gen_kwargs['logits_processor'] = LogitsProcessorList([ThinkingBudge(self.tokenizer, budget)])
         pipe = pipeline(
             "text-generation",
             model=model,
@@ -106,6 +147,7 @@ class LLMProvider:
             do_sample=self.temperature > 0,
             temperature=self.temperature,
             return_full_text=False,
+            **gen_kwargs, 
         )
         return HuggingFacePipeline(pipeline=pipe)
 
