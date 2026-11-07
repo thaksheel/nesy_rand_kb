@@ -15,7 +15,7 @@ class Evaluation:
 
     def __init__(
         self,
-        provider: Literal["hf", "openai"],
+        provider: Literal["hf", "openai", "anthropic"],
         model_name: str,
         token: str,
         load_4bit: bool,

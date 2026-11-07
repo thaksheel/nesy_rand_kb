@@ -12,6 +12,7 @@ from transformers import (
 )
 from langchain_huggingface import HuggingFacePipeline
 from langchain_openai import ChatOpenAI
+from langchain_anthropic import ChatAnthropic 
 from langchain_core.language_models import BaseLLM
 
 from . import LLMOut
@@ -52,7 +53,7 @@ class LLMProvider:
 
     def __init__(
         self,
-        provider: Literal["hf", "openai"],
+        provider: Literal["hf", "openai", "anthropic"],
         model_name: str,
         token: str,
         max_new_tokens: int = 2048,
@@ -80,17 +81,27 @@ class LLMProvider:
             self.llm = self.init_hf(token)
         elif provider == "openai":
             self.llm = self.init_openai(token)
+        elif provider == "anthropic":
+            self.llm = self.init_anthropic(token)
 
     @staticmethod
     def _text(msg) -> str:
-        """Final answer text; Responses API content is a list of blocks."""
+        """Final answer text, with any thinking summary wrapped in <think> tags."""
         if isinstance(msg.content, str):
             return msg.content
-        return "".join(
-            b.get("text", "")
-            for b in msg.content
-            if isinstance(b, dict) and b.get("type") in ("text", "output_text")
-        )
+        thinking, text = [], []
+        for b in msg.content:
+            if not isinstance(b, dict):
+                continue
+            if b.get("type") in ("text", "output_text"):
+                text.append(b.get("text", ""))
+            elif b.get("type") == "thinking" and b.get("thinking"):
+                thinking.append(b["thinking"])
+        answer = "".join(text)
+        if not thinking:
+            return answer
+        joined = "\n".join(thinking)
+        return f"<think>\n{joined}\n</think>\n\n{answer}"
 
     def invoke(self, messages: List[Dict[str, str]], prompt: str = None) -> LLMOut:
         if prompt is None:
@@ -105,6 +116,18 @@ class LLMProvider:
                     provider=self.provider,
                 )
             elif self.provider == "openai":
+                msg = self.llm.invoke(messages)
+                usage = msg.usage_metadata or {}
+                details = usage.get("output_token_details") or {}
+                return LLMOut(
+                    response=self._text(msg),
+                    input_token=usage.get("input_tokens", 0),
+                    output_token=usage.get("output_tokens", 0),
+                    model_name=self.model_name,
+                    provider=self.provider,
+                    reasoning_token=details.get("reasoning", 0),
+                )
+            elif self.provider == "anthropic": 
                 msg = self.llm.invoke(messages)
                 usage = msg.usage_metadata or {}
                 details = usage.get("output_token_details") or {}
@@ -176,6 +199,21 @@ class LLMProvider:
             **gen_kwargs, 
         )
         return HuggingFacePipeline(pipeline=pipe)
+
+    def init_anthropic(self, token: str): 
+        NO_SAMPLING_PREFIXES = ("claude-opus-5", "claude-sonnet-5", "claude-haiku-5", "claude-fable-5")
+        kwargs = {
+            "model": self.model_name,
+            "api_key": token, 
+            "max_tokens": self.max_new_tokens, 
+        }
+        if self.reasoning_effort is not None:
+            kwargs['effort'] = self.reasoning_effort 
+        if self.reasoning_summary: 
+            kwargs['thinking'] = {"type": "adaptive", "display": "summarized"}
+        if not self.model_name.startswith(NO_SAMPLING_PREFIXES):
+            kwargs["temperature"] = self.temperature 
+        return ChatAnthropic(**kwargs)
 
     def manual_build_prompt(self, messages: List[Dict[str, str]]):
         text = ""
