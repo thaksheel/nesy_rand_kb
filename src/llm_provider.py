@@ -49,15 +49,18 @@ class ThinkingBudge(LogitsProcessor):
 
 
 class LLMProvider:
+
     def __init__(
         self,
         provider: Literal["hf", "openai"],
         model_name: str,
         token: str,
         max_new_tokens: int = 2048,
-        temperature: float = 0.0,
+        temperature: float = 1,
         load_in_4bit: bool = True,
-        answer_reserve: int = 1024, 
+        answer_reserve: int = 1024,
+        reasoning_effort: Literal['none', "low", "medium", "high", "xhigh"] = "none",
+        reasoning_summary: Literal["auto", "concise", "detailed"] = None,  
     ):
         self.provider = provider
         self.model_name = model_name
@@ -66,6 +69,8 @@ class LLMProvider:
         self.temperature = temperature
         self.load_in_4bit = load_in_4bit
         self.answer_reserve = answer_reserve
+        self.reasoning_effort = reasoning_effort 
+        self.reasoning_summary = reasoning_summary
 
         # null fields
         self.tokenizer: TokenizersBackend = None
@@ -75,6 +80,17 @@ class LLMProvider:
             self.llm = self.init_hf(token)
         elif provider == "openai":
             self.llm = self.init_openai(token)
+
+    @staticmethod
+    def _text(msg) -> str:
+        """Final answer text; Responses API content is a list of blocks."""
+        if isinstance(msg.content, str):
+            return msg.content
+        return "".join(
+            b.get("text", "")
+            for b in msg.content
+            if isinstance(b, dict) and b.get("type") in ("text", "output_text")
+        )
 
     def invoke(self, messages: List[Dict[str, str]], prompt: str = None) -> LLMOut:
         if prompt is None:
@@ -89,15 +105,16 @@ class LLMProvider:
                     provider=self.provider,
                 )
             elif self.provider == "openai":
-                response = self.llm.invoke(messages)
-                usage = response.response_metadata["token_usage"]
-                response = response.content
+                msg = self.llm.invoke(messages)
+                usage = msg.usage_metadata or {}
+                details = usage.get("output_token_details") or {}
                 return LLMOut(
-                    response=response,
-                    input_token=usage["prompt_tokens"],
-                    output_token=usage["completion_tokens"],
+                    response=self._text(msg),
+                    input_token=usage.get("input_tokens", 0),
+                    output_token=usage.get("output_tokens", 0),
                     model_name=self.model_name,
                     provider=self.provider,
+                    reasoning_token=details.get("reasoning", 0),
                 )
             else:
                 raise NotImplementedError
@@ -112,11 +129,20 @@ class LLMProvider:
             )
 
     def init_openai(self, token: str):
-        return ChatOpenAI(
-            model=self.model_name,
-            temperature=self.temperature,
-            api_key=token,
-        )
+        kwargs = {"model": self.model_name, "api_key": token}
+        REASONING_PREFIXES = ("gpt-5", "gpt-6", "o1", "o3", "o4")
+        is_reasoning = self.model_name.startswith(REASONING_PREFIXES)
+        if is_reasoning and self.reasoning_effort is not None:
+            reasoning = {"effort": self.reasoning_effort}
+            if self.reasoning_summary:
+                reasoning["summary"] = self.reasoning_summary
+            kwargs["reasoning"] = reasoning
+            kwargs["use_responses_api"] = True
+
+        # reasoning models reject temperature unless reasoning is off
+        if not is_reasoning or self.reasoning_effort == "none":
+            kwargs["temperature"] = self.temperature
+        return ChatOpenAI(**kwargs)
 
     def init_hf(self, token):
         quantization_config = None

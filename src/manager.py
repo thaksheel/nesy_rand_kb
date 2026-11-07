@@ -1,7 +1,7 @@
 import os
 import numpy as np
 import re
-from typing import List, Optional
+from typing import List, Optional,Literal, Iterable
 from copy import deepcopy
 from numpy.typing import NDArray
 
@@ -76,7 +76,57 @@ class KBManager:
     def add_reasoning_ref(self, kb: List[KBData]):
         for i, _ in enumerate(kb):
             kb[i].prompt = kb[i].prompt.replace("<RESONING EXAMPLE/>", self.reference)
-        return kb
+        return kb 
+
+    def save_prompts(
+        self,
+        prompts: Iterable[Prompt],
+        outdir: str = "./exports/prompts",
+        qids: Optional[Iterable[int]] = None,
+        add_reference: bool = False,
+    ) -> List[str]:
+        """Save the prompts of each strategy to text files for future reference.
+
+        Writes one file per strategy, ``<kb>_<prompt.name>_<format>.txt``, holding
+        the prompt of every selected query. The prompts come from `get_kb_data`,
+        so they are exactly what the evaluation sends to the model.
+
+        Parameters
+        ----------
+        prompts : iterable of Prompt
+            Strategy configurations to save.
+        outdir : str, default="./exports/prompts"
+            Output folder, created if missing.
+        qids : iterable of int or None, default=None
+            Query ids to include. None saves every query.
+        add_reference : bool, default=False
+            Passed to `get_kb_data`; appends reference.txt to each prompt.
+
+        Returns
+        -------
+        list of str
+            Paths of the files written.
+        """
+        os.makedirs(outdir, exist_ok=True)
+        stem = os.path.splitext(self.kb_name)[0]
+        paths = []
+        for prompt in prompts:
+            kb_data = self.get_kb_data(add_reference=add_reference, prompt=prompt)
+            if qids is not None:
+                keep = set(qids)
+                kb_data = [k for k in kb_data if k.qid in keep]
+            path = os.path.join(outdir, f"{stem}_{prompt.name}_{prompt.fmt.name.lower()}.txt")
+            with open(path, "w", encoding="utf-8") as f:
+                for k in kb_data:
+                    f.write("=" * 80 + "\n")
+                    f.write(
+                        f"qid={k.qid} | query={k.query} | "
+                        f"groundtruth={k.groundtruth} | depth={k.depths}\n"
+                    )
+                    f.write("=" * 80 + "\n")
+                    f.write(k.prompt + "\n\n")
+            paths.append(path)
+        return paths
 
     def get_kb_data(
         self,
@@ -105,17 +155,17 @@ class KBManager:
                 )
                 for i, q in enumerate(self.queries)
             ]
-
-        kb = [
-            KBData(
-                qid=i,
-                query=q,
-                prompt=self.generate_query_prompt(q),
-                groundtruth=self.groundtruths[i],
-                depths=self.depths[i],
-            )
-            for i, q in enumerate(self.queries)
-        ]
-        if add_reference:
-            kb = self.add_reasoning_ref(kb)
-        return kb
+        else:
+            kb = [
+                KBData(
+                    qid=i,
+                    query=q,
+                    prompt=self.generate_query_prompt(q),
+                    groundtruth=self.groundtruths[i],
+                    depths=self.depths[i],
+                )
+                for i, q in enumerate(self.queries)
+            ]
+            if add_reference:
+                kb = self.add_reasoning_ref(kb)
+            return kb

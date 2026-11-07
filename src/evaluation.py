@@ -1,11 +1,10 @@
-import torch
 import warnings
-from typing import Tuple, List, Dict, Optional, Literal
+from typing import Tuple, List, Optional, Literal
 from numpy.typing import NDArray
 import numpy as np
 import pandas as pd
 import re
-from sklearn.metrics import accuracy_score, f1_score
+from sklearn.metrics import accuracy_score, f1_score, balanced_accuracy_score, confusion_matrix
 from tqdm import tqdm
 import logging
 
@@ -76,11 +75,31 @@ class Evaluation:
         df.to_csv(outpath)
         return df
 
+    def scoring(self, trues, preds, llm_outs: List[LLMOut]):
+        tn, fp, fn, tp = confusion_matrix(trues, preds).ravel()
+        r = Results(
+            accuracy=accuracy_score(trues, preds),
+            f1_macro=f1_score(trues, preds, average="macro"),
+            f1=f1_score(trues, preds, average=None), 
+            balanced_accuracy=balanced_accuracy_score(trues, preds), 
+            true_neg=tn, 
+            true_pos=tp, 
+            false_pos=fp, 
+            false_neg=fn, 
+            trues=np.array(trues).astype(int),
+            preds=np.array(preds).astype(int),
+            input_token=np.array([l.input_token for l in llm_outs]),
+            output_token=np.array([l.output_token for l in llm_outs]),
+            input_token_avg=np.array([l.input_token for l in llm_outs]).mean(),
+            output_token_avg=np.array([l.output_token for l in llm_outs]).mean(),
+        )
+        return r
+
     def evaluate_kb(
         self,
         kbd: List[KBData],
         reasoning_outpath: str = None,
-    ) -> Results: 
+    ) -> Results:
         preds = []
         trues = []
         reasonings = []
@@ -92,6 +111,7 @@ class Evaluation:
             if pred is None and reasoning is None:
                 warnings.warn("predictions/reasoning from llm is none in evaluate_kb.")
                 continue
+            
             preds.append(pred)
             reasonings.append(reasoning)
             llm_outs.append(llm_out)
@@ -107,17 +127,7 @@ class Evaluation:
         if reasoning_outpath:
             self.save_reasoning(kbd, reasonings, outpath=reasoning_outpath)
         preds = np.array(preds).astype(int)
-        return Results(
-            accuracy=accuracy_score(trues, preds),
-            f1_macro=f1_score(trues, preds, average="macro"),
-            f1=f1_score(trues, preds, average=None),
-            trues=np.array(trues).astype(int),
-            preds=np.array(preds).astype(int),
-            input_token=np.array([l.input_token for l in llm_outs]),
-            output_token=np.array([l.output_token for l in llm_outs]),
-            input_token_avg=np.array([l.input_token for l in llm_outs]).mean(),
-            output_token_avg=np.array([l.output_token for l in llm_outs]).mean(),
-        )
+        return self.scoring(trues, preds, llm_outs)
 
     def score_by_reasoning_steps(self, df: pd.DataFrame):
         metrics_by_depth = (

@@ -22,6 +22,11 @@ class Results:
     accuracy: float 
     f1_macro: float 
     f1: NDArray 
+    true_pos: NDArray 
+    true_neg: NDArray 
+    false_neg: NDArray 
+    false_pos: NDArray 
+    balanced_accuracy: NDArray 
     preds: NDArray
     trues: NDArray  
     input_token_avg: int 
@@ -54,3 +59,6 @@ class CloseModelSelection(Enum):
     gpt56_sol = "gpt-5.6-sol"
     gpt56_luna = "gpt-5.6-luna"
     gpt56_terra = "gpt-5.6-terra"
+    opus55 = "claude-opus-5-5"
+    sonnet55 = "claude-sonnet-5-5"
+    haiku55 = "claude-haiku-5-5"

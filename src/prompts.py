@@ -182,17 +182,83 @@ class KATEShotsExamples(ShotsExamples):
 
 @dataclass
 class Prompt:
+    """Configuration for one prompting strategy.
+
+Passed to ``KBManager.get_kb_data(prompt=...)``, which builds one prompt
+string per query through ``PromptStrategy``.
+
+Parameters
+----------
+method : Methods, default=Methods.ZERO_SHOT
+    Prompting method. ``ZERO_SHOT_COT`` and ``FEW_SHOT_COT`` add a
+    chain-of-thought instruction. ``FEW_SHOT`` and ``FEW_SHOT_COT`` add
+    solved example queries from the same knowledge base.
+answer_format : AnswerFormat or None, default=None
+    Output format requested from the model. If None, it follows
+    `method`: ``AnswerFormat.REASONING`` for chain-of-thought methods,
+    ``AnswerFormat.ANSWER`` otherwise.
+num_examples : int, default=4
+    Number of example queries shown per prompt. Fewer are shown if
+    fewer candidates remain after filtering. Few-shot methods only.
+few_shots_type : {"random", "kate"}, default="random"
+    How examples are selected. ``"random"`` samples candidates at
+    random. ``"kate"`` picks the queries that share the most predicates
+    with the target query (Jaccard similarity) and places the most
+    similar one last, next to the target. Few-shot methods only.
+balanced : bool, default=True
+    If True, split the examples evenly between true and false answers.
+    For an odd `num_examples`, the extra example goes to the label of
+    the first candidate in selection order. If one label runs out, the
+    remaining slots are filled in selection order.
+exclude_shared_constants : bool, default=True
+    If True, skip candidate queries that mention any constant from the
+    target query. This reduces, but does not remove, the chance that an
+    example is a step in the target's proof.
+demonstration : bool, default=False
+    If True, replace each example's answer with a random true/false
+    label with probability `demon_rate`. This is the random-label
+    ablation from the sentiment version.
+demon_rate : float, default=0.5
+    Probability of randomizing each example's label when
+    `demonstration` is True. A randomized label still matches the
+    ground truth half the time, so the expected share of wrong labels
+    is ``demon_rate / 2``.
+seed : int, default=0
+    Base seed for example selection and label randomization. It is
+    combined with the knowledge-base file name and the query id, so the
+    same configuration always gives the same prompts for every model
+    and run.
+
+Attributes
+----------
+fmt : AnswerFormat
+    The output format actually used (`answer_format`, or the default
+    for `method` if `answer_format` is None).
+name : str
+    Short label for file names and result tables, such as
+    ``"zero_shot"`` or ``"few_shot_cot-k4_random"``. The demonstration
+    rate is appended when `demonstration` is True.
+
+See Also
+--------
+PromptStrategy : Builds the prompt strings from this configuration.
+KBManager.get_kb_data : Creates the ``KBData`` list for a configuration.
+
+Examples
+--------
+>>> p = Prompt(method=Methods.FEW_SHOT_COT, num_examples=4)
+>>> p.name
+'few_shot_cot-k4_random'
+>>> p.fmt is AnswerFormat.REASONING
+True
+"""
     method: Methods = Methods.ZERO_SHOT
-    answer_format: Optional[AnswerFormat] = (
-        None  # None: REASONING for CoT methods, else ANSWER
-    )
+    answer_format: Optional[AnswerFormat] = None
     num_examples: int = 4
     few_shots_type: Literal["random", "kate"] = "random"
-    balanced: bool = True  # half true, half false examples
-    exclude_shared_constants: bool = (
-        True  # skip examples that mention the target's constants
-    )
-    demonstration: bool = False  # randomize example labels with probability demon_rate
+    balanced: bool = True
+    exclude_shared_constants: bool = True
+    demonstration: bool = False
     demon_rate: float = 0.5
     seed: int = 0
 
@@ -287,3 +353,5 @@ class PromptStrategy:
 
     def get_user_prompt(self, qid: int) -> str:
         return self._build(qid)["user"]
+
+
